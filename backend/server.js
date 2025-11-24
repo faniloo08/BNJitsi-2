@@ -31,7 +31,7 @@ app.use(express.json());
 // Configuration JaaS depuis .env
 const JAAS_APP_ID = process.env.JAAS_APP_ID; // Ex: vpaas-magic-cookie-adc32f2732de47b3bdf19305d2e91523
 const JAAS_API_KEY = process.env.JAAS_API_KEY; // Votre API Key ID
-const PRIVATE_KEY_PATH = process.env.PRIVATE_KEY_PATH || './private.key';
+const PRIVATE_KEY_PATH = process.env.PRIVATE_KEY_PATH;
 
 // Charger la clé privée
 let privateKey;
