@@ -6,7 +6,26 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+// CORS sécurisé pour production
+const allowedOrigins = [
+  'http://localhost:3000', // Dev local
+  'https://bnj-itsi-2.vercel.app/', // Production
+];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Autoriser les requêtes sans origin (comme Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Non autorisé par CORS'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json());
 
 // Configuration JaaS depuis .env

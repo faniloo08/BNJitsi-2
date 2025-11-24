@@ -389,10 +389,10 @@ const JitsiMeetPlatform = () => {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-[#590293] flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
           <div className="text-center mb-8">
-            <Video className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
+            <Video className="w-16 h-16 text-[#590293] mx-auto mb-4" />
             <h1 className="text-3xl font-bold text-gray-800 mb-2">Bienvenue</h1>
             <p className="text-gray-600">Connectez-vous pour organiser vos réunions</p>
           </div>
@@ -402,7 +402,7 @@ const JitsiMeetPlatform = () => {
               <input
                 type="email"
                 id="loginEmail"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#590293] focus:border-transparent"
                 placeholder="votre@email.com"
               />
             </div>
@@ -411,7 +411,7 @@ const JitsiMeetPlatform = () => {
               <input
                 type="text"
                 id="loginPseudo"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#590293] focus:border-transparent"
                 placeholder="Votre nom d'affichage"
               />
             </div>
@@ -425,7 +425,7 @@ const JitsiMeetPlatform = () => {
                   alert('Veuillez remplir tous les champs correctement');
                 }
               }}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-medium"
+              className="w-full bg-[#590293] text-white py-3 rounded-lg hover:bg-[#590293] transition font-medium"
             >
               Se connecter
             </button>
@@ -440,7 +440,7 @@ const JitsiMeetPlatform = () => {
       <div className="h-screen flex flex-col bg-gray-900">
         <div className="bg-gray-800 p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Video className="w-6 h-6 text-indigo-400" />
+            <Video className="w-6 h-6 text-[#590293]" />
             <div>
               <h2 className="text-white font-semibold">{activeMeet.title}</h2>
               <p className="text-gray-400 text-sm">Connecté en tant que: {activeMeet.userPseudo}</p>
@@ -561,7 +561,7 @@ const JitsiMeetPlatform = () => {
                   <h3 className="font-semibold text-lg text-gray-800">{meet.title}</h3>
                   <div className="flex items-center gap-2">
                     {meet.organizer === currentUser.email && (
-                      <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded">Organisateur</span>
+                      <span className="bg-#590293-100 text-#590293-800 text-xs px-2 py-1 rounded">Organisateur</span>
                     )}
                   </div>
                 </div>
