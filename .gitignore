@@ -1,0 +1,292 @@
+# ============================================
+# 🔐 SÉCURITÉ - CRITIQUE
+# ============================================
+# ⚠️ NE JAMAIS COMMITER CES FICHIERS !
+
+# Variables d'environnement (contiennent les clés secrètes)
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+**/.env
+**/.env.*
+
+# Clés privées JaaS (CRITIQUE - Ne JAMAIS commiter !)
+*.key
+*.pem
+*.p12
+*.pfx
+private.key
+**/private.key
+privatekey.pem
+**/privatekey.pem
+
+# Certificats SSL
+*.crt
+*.cer
+*.der
+
+# Secrets et tokens
+secrets.json
+credentials.json
+service-account.json
+.secrets/
+
+
+# ============================================
+# 📦 Node.js & npm
+# ============================================
+
+# Dépendances
+node_modules/
+**/node_modules/
+jspm_packages/
+
+# Logs npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Cache npm
+.npm
+.eslintcache
+.node_repl_history
+
+# Yarn
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+
+# ============================================
+# 🎨 Frontend React
+# ============================================
+
+# Production build
+/build
+/dist
+**/build/
+**/dist/
+
+# Coverage tests
+/coverage
+**/coverage/
+
+# React
+.cache/
+*.tsbuildinfo
+
+# Next.js (si utilisé plus tard)
+.next/
+out/
+
+# Gatsby (si utilisé plus tard)
+.cache/
+public/
+
+
+# ============================================
+# 🔧 Backend
+# ============================================
+
+# Logs serveur
+logs/
+*.log
+**/*.log
+
+# Fichiers temporaires
+tmp/
+temp/
+**/tmp/
+**/temp/
+
+
+# ============================================
+# 🖥️ Système d'exploitation
+# ============================================
+
+# macOS
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+
+# ============================================
+# 💻 IDEs & Editeurs
+# ============================================
+
+# Visual Studio Code
+.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# JetBrains (WebStorm, IntelliJ, etc.)
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+
+# ============================================
+# 🧪 Tests
+# ============================================
+
+# Jest
+coverage/
+.nyc_output/
+
+# Cypress
+cypress/videos/
+cypress/screenshots/
+
+
+# ============================================
+# 📱 Mobile (si vous développez une app mobile plus tard)
+# ============================================
+
+# React Native
+.expo/
+.expo-shared/
+
+
+# ============================================
+# 🚀 Déploiement & Build
+# ============================================
+
+# Vercel
+.vercel
+.now
+
+# Netlify
+.netlify/
+
+# Docker (si utilisé)
+*.log
+.dockerignore
+
+# Terraform (si utilisé)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+
+# ============================================
+# 📊 Divers
+# ============================================
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Base de données locales (si ajoutées plus tard)
+*.sqlite
+*.sqlite3
+*.db
+
+# Fichiers temporaires
+*.swp
+*.swo
+*.bak
+*.tmp
+*~
+
+# Fichiers de sauvegarde
+*.backup
+*.old
+*.orig
+
+
+# ============================================
+# ✅ Fichiers à INCLURE (exceptions)
+# ============================================
+# Ces fichiers DOIVENT être commitées malgré les règles ci-dessus
+
+# Template des variables d'environnement
+!.env.example
+!.env.template
+!env.example
+!env.template
+
+# Configuration exemple
+!config.example.json
+!secrets.example.json
