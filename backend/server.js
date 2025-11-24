@@ -9,7 +9,7 @@ const app = express();
 // CORS sécurisé pour production
 const allowedOrigins = [
   'http://localhost:3000', // Dev local
-  'https://bnj-itsi-2.vercel.app/', // Production
+  'https://bnj-itsi-2.vercel.app', // Production
 ];
 
 app.use(cors({
