@@ -31,13 +31,20 @@ app.use(express.json());
 // Configuration JaaS depuis .env
 const JAAS_APP_ID = process.env.JAAS_APP_ID; // Ex: vpaas-magic-cookie-adc32f2732de47b3bdf19305d2e91523
 const JAAS_API_KEY = process.env.JAAS_API_KEY; // Votre API Key ID
-const PRIVATE_KEY_PATH = process.env.PRIVATE_KEY_PATH;
+const PRIVATE_KEY_PATH = process.env.PRIVATE_KEY_PATH || './private.key';
 
 // Charger la clé privée
 let privateKey;
 try {
-  privateKey = fs.readFileSync(PRIVATE_KEY_PATH, 'utf8');
-  console.log('✅ Clé privée chargée avec succès');
+  // En production, utiliser la variable d'environnement
+  if (process.env.PRIVATE_KEY) {
+    privateKey = process.env.PRIVATE_KEY.replace(/\\n/g, '\n');
+    console.log('✅ Clé privée chargée depuis variable d\'environnement');
+  } else {
+    // En dev, utiliser le fichier
+    privateKey = fs.readFileSync(PRIVATE_KEY_PATH, 'utf8');
+    console.log('✅ Clé privée chargée depuis fichier');
+  }
 } catch (error) {
   console.error('❌ Erreur lors du chargement de la clé privée:', error.message);
   process.exit(1);
