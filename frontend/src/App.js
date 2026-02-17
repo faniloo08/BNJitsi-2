@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Users, Video, Send, X, Plus, Check, Clock, Mail, AlertCircle, CalendarPlus } from 'lucide-react';
+import { Calendar, Users, Video, Send, X, Plus, Check, Clock, Mail, AlertCircle, CalendarPlus, Pencil, Save, Trash2 } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 
 // Configuration EmailJS
@@ -14,6 +14,11 @@ const JAAS_CONFIG = {
   appId: process.env.REACT_APP_JAAS_APP_ID || 'vpaas-magic-cookie-adc32f2732de47b3bdf19305d2e91523',
   jwtApiUrl: process.env.REACT_APP_JWT_API_URL || 'http://localhost:3001',
   domain: '8x8.vc'
+};
+
+// Configuration Make Webhook
+const MAKE_CONFIG = {
+  webhookUrl: process.env.REACT_APP_MAKE_WEBHOOK_URL || 'YOUR_MAKE_WEBHOOK_URL'
 };
 
 const JitsiMeetPlatform = () => {
@@ -35,9 +40,61 @@ const JitsiMeetPlatform = () => {
     invitees: ['']
   });
 
+  const [showParticipants, setShowParticipants] = useState(null);
+  const [showEditMeet, setShowEditMeet] = useState(false);
+  const [editMeetForm, setEditMeetForm] = useState(null);
+
+  // Obtenir le nombre total de participants (organisateur + tous les invités uniques)
+  const getTotalParticipants = (meet) => {
+    // Obtenir tous les emails invités uniques pour ce meet
+    const uniqueInvitees = new Set(
+      invitations
+        .filter(inv => inv.meetId === meet.id)
+        .map(inv => inv.inviteeEmail)
+    );
+
+    return 1 + uniqueInvitees.size; // 1 (organisateur) + invités uniques
+  };
+
+  // Obtenir la liste complète des participants sans doublons
+  const getParticipantsList = (meet) => {
+    const participants = [
+      {
+        email: meet.organizer,
+        pseudo: meet.organizerpseudo,
+        role: 'Organisateur'
+      }
+    ];
+
+    // Utiliser un Set pour éviter les doublons d'emails
+    const processedEmails = new Set([meet.organizer]);
+
+    // Ajouter les invités
+    const meetInvitations = invitations.filter(inv => inv.meetId === meet.id);
+    meetInvitations.forEach(inv => {
+      if (!processedEmails.has(inv.inviteeEmail)) {
+        participants.push({
+          email: inv.inviteeEmail,
+          pseudo: inv.inviteeEmail.split('@')[0],
+          role: 'Invité'
+        });
+        processedEmails.add(inv.inviteeEmail);
+      }
+    });
+
+    return participants;
+  };
+
+  // Formater l'heure française pour l'affichage
+  const formatFrenchTime = (dateStr, timeStr) => {
+    // Les heures sont saisies en heure française (UTC+1/+2)
+    const frenchDate = new Date(`${dateStr}T${timeStr}:00`);
+    return frenchDate.toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+  };
+
   // Générer un lien Google Calendar
-  const generateGoogleCalendarUrl = (meet) => {
-    const start = new Date(`${meet.date}T${meet.time}`);
+  const generateGoogleCalendarUrl = (meet, includeGuests = false) => {
+    const start = new Date(`${meet.date}T${meet.time}:00`); // Heure française
     const end = new Date(start.getTime() + meet.duration * 60000);
 
     const formatDate = (date) =>
@@ -46,7 +103,24 @@ const JitsiMeetPlatform = () => {
     const meetLink = `${window.location.origin}?roomName=${meet.roomName}&title=${encodeURIComponent(meet.title)}`;
     const description = `Rejoignez la réunion vidéo :\n${meetLink}\n\nOrganisé par : ${meet.organizerPseudo}`;
 
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meet.title)}&details=${encodeURIComponent(description)}&dates=${formatDate(start)}/${formatDate(end)}`;
+    let url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meet.title)}&details=${encodeURIComponent(description)}&dates=${formatDate(start)}/${formatDate(end)}`;
+
+    if (includeGuests) {
+      // Récupérer les emails uniques des invités pour ce meet
+      const uniqueInvitees = new Set(
+        invitations
+          .filter(inv => inv.meetId === meet.id)
+          .map(inv => inv.inviteeEmail)
+      );
+
+      // Convertir en tableau et joindre par des virgules
+      const guests = Array.from(uniqueInvitees).join(',');
+      if (guests) {
+        url += `&add=${encodeURIComponent(guests)}`;
+      }
+    }
+
+    return url;
   };
 
   useEffect(() => {
@@ -66,47 +140,59 @@ const JitsiMeetPlatform = () => {
     const title = urlParams.get('title');
 
     if (roomName) {
-      const pseudo = prompt('Entrez votre pseudo :');
+      const pseudo = prompt('Entrez votre prénom :');
       if (pseudo) {
         handleJoinMeet({ roomName, title: title || 'Réunion' }, pseudo);
       }
     }
   };
 
-    const loadData = async () => {
+  const loadData = async () => {
     try {
-        const meetsData = localStorage.getItem('meets');
-        const invitationsData = localStorage.getItem('invitations');
-        const userData = localStorage.getItem('currentUser');
-        
-        if (meetsData) setMeets(JSON.parse(meetsData));
-        if (invitationsData) setInvitations(JSON.parse(invitationsData));
-        if (userData) setCurrentUser(JSON.parse(userData));
+      const meetsData = localStorage.getItem('meets');
+      const invitationsData = localStorage.getItem('invitations');
+      const userData = localStorage.getItem('currentUser');
+
+      if (meetsData) setMeets(JSON.parse(meetsData));
+      if (invitationsData) setInvitations(JSON.parse(invitationsData));
+      if (userData) setCurrentUser(JSON.parse(userData));
     } catch (error) {
-        console.log('Initialisation des données');
+      console.log('Initialisation des données');
     }
-    };
+  };
 
-
-    const saveData = async (key, data) => {
-        try {
-            localStorage.setItem(key, JSON.stringify(data));
-        } catch (error) {
-            console.error('Erreur de sauvegarde:', error);
-        }
-    };
-
+  const saveData = async (key, data) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (error) {
+      console.error('Erreur de sauvegarde:', error);
+    }
+  };
 
   async function sendInvitationEmail(inviteeEmail, meet) {
     try {
       const join_url = `${window.location.origin}?roomName=${meet.roomName}&title=${encodeURIComponent(meet.title)}`;
       const google_calendar_url = generateGoogleCalendarUrl(meet);
 
+      // Formater la date et l'heure en français pour l'email
+      const meetDateTime = new Date(`${meet.date}T${meet.time}:00`);
+      const formattedDate = meetDateTime.toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      const formattedTime = meetDateTime.toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Europe/Paris'
+      });
+
       const templateParams = {
         to_email: inviteeEmail,
         meet_title: meet.title,
-        meet_date: meet.date,
-        meet_time: meet.time,
+        meet_date: formattedDate,
+        meet_time: formattedTime,
         meet_duration: meet.duration,
         organizer_name: currentUser.pseudo,
         organizer_email: currentUser.email,
@@ -125,6 +211,54 @@ const JitsiMeetPlatform = () => {
     } catch (error) {
       console.error('Erreur envoi email:', error);
       return { success: false, email: inviteeEmail, error: error.text || error.message };
+    }
+  }
+
+  // Envoyer les données de la réunion à Make pour planifier le réveil du backend
+  async function sendMeetingToMake(meet) {
+    // Ne pas envoyer si l'URL du webhook n'est pas configurée
+    if (!MAKE_CONFIG.webhookUrl || MAKE_CONFIG.webhookUrl === 'YOUR_MAKE_WEBHOOK_URL') {
+      console.log('Webhook Make non configuré, activation automatique du backend désactivée');
+      return { success: false, reason: 'webhook_not_configured' };
+    }
+
+    try {
+      // Calculer le timestamp exact de la réunion
+      const meetingDateTime = new Date(`${meet.date}T${meet.time}:00`);
+      const meetingTimestamp = meetingDateTime.getTime();
+
+      const payload = {
+        meetId: meet.id,
+        roomName: meet.roomName,
+        title: meet.title,
+        date: meet.date,
+        time: meet.time,
+        meetingTimestamp: meetingTimestamp,
+        organizerEmail: meet.organizer,
+        organizerPseudo: meet.organizerpseudo,
+        backendUrl: JAAS_CONFIG.jwtApiUrl,
+        createdAt: new Date().toISOString()
+      };
+
+      console.log('📤 Envoi des données de réunion à Make:', payload);
+
+      const response = await fetch(MAKE_CONFIG.webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erreur Make webhook: ${response.status}`);
+      }
+
+      console.log('✅ Réunion envoyée à Make avec succès');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erreur envoi à Make:', error);
+      return { success: false, error: error.message };
     }
   }
 
@@ -173,8 +307,14 @@ const JitsiMeetPlatform = () => {
     setMeets(updatedMeets);
     await saveData('meets', updatedMeets);
 
+    // Envoyer la réunion à Make pour planifier le réveil du backend
+    const makeResult = await sendMeetingToMake(newMeet);
+    if (makeResult.success) {
+      console.log('✅ Réveil automatique du backend planifié via Make');
+    }
+
     const validInvitees = meetForm.invitees.filter(email => email.trim() && email.includes('@'));
-    
+
     if (validInvitees.length === 0) {
       setShowCreateMeet(false);
       setMeetForm({ title: '', date: '', time: '', duration: '60', invitees: [''] });
@@ -224,6 +364,100 @@ const JitsiMeetPlatform = () => {
     setMeetForm({ title: '', date: '', time: '', duration: '60', invitees: [''] });
   };
 
+  const handleEditMeet = (meet) => {
+    // Préparer le formulaire d'édition
+    // On récupère TOUS les invités depuis la liste des invitations (invités acceptés ET en attente)
+    // Utiliser un Set pour éviter les doublons
+    const existingInvitees = [...new Set(
+      invitations
+        .filter(inv => inv.meetId === meet.id)
+        .map(inv => inv.inviteeEmail)
+    )];
+
+    setEditMeetForm({
+      id: meet.id,
+      title: meet.title,
+      date: meet.date,
+      time: meet.time,
+      duration: meet.duration,
+      invitees: existingInvitees.length > 0 ? existingInvitees : [''],
+      originalMeet: meet
+    });
+    setShowEditMeet(true);
+  };
+
+  const handleUpdateMeet = async () => {
+    if (!editMeetForm.title || !editMeetForm.date || !editMeetForm.time) {
+      alert('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    const updatedMeets = meets.map(m => {
+      if (m.id === editMeetForm.id) {
+        return {
+          ...m,
+          title: editMeetForm.title,
+          date: editMeetForm.date,
+          time: editMeetForm.time,
+          duration: editMeetForm.duration,
+          // Nous ne modifions pas les participants ici pour le moment, sauf si logique d'ajout complexe
+          // Pour faire simple, on garde les participants tels quels ou on gère les ajouts
+        };
+      }
+      return m;
+    });
+
+    setMeets(updatedMeets);
+    await saveData('meets', updatedMeets);
+
+    // 1. Identifier tous les emails valides et uniques du formulaire pour l'envoi
+    const uniqueFormEmails = [...new Set(
+      editMeetForm.invitees.filter(email =>
+        email.trim() &&
+        email.includes('@') &&
+        email !== editMeetForm.originalMeet.organizer
+      )
+    )];
+
+    // 2. Identifier les nouveaux invités (ceux qui n'ont jamais été invités) pour la base de données
+    const existingInvitationEmails = invitations
+      .filter(inv => inv.meetId === editMeetForm.id)
+      .map(inv => inv.inviteeEmail);
+
+    const newInvitees = uniqueFormEmails.filter(email =>
+      !existingInvitationEmails.includes(email)
+    );
+
+    // 3. Ajouter uniquement les nouveaux à la base de données (pour ne pas fausser l'historique/les stats)
+    if (newInvitees.length > 0) {
+      const newInvitationObjects = newInvitees.map(email => ({
+        id: `${editMeetForm.id}-${email}-${Date.now()}`,
+        meetId: editMeetForm.id,
+        inviteeEmail: email,
+        status: 'pending',
+        sentAt: new Date().toISOString()
+      }));
+
+      const updatedInvitations = [...invitations, ...newInvitationObjects];
+      setInvitations(updatedInvitations);
+      await saveData('invitations', updatedInvitations);
+    }
+
+    // 4. Envoyer les emails à TOUS les participants du formulaire (Nouveaux + Anciens)
+    setSendingEmails(true);
+    const emailPromises = uniqueFormEmails.map(email =>
+      sendInvitationEmail(email, { ...editMeetForm.originalMeet, ...editMeetForm })
+    );
+
+    await Promise.all(emailPromises);
+    setSendingEmails(false);
+
+    alert(`Réunion mise à jour et notifications envoyées à ${uniqueFormEmails.length} participant(s).`);
+
+    setShowEditMeet(false);
+    setEditMeetForm(null);
+  };
+
   const handleInvitationResponse = async (invitationId, response) => {
     const invitation = invitations.find(inv => inv.id === invitationId);
     const meet = meets.find(m => m.id === invitation.meetId);
@@ -238,13 +472,13 @@ const JitsiMeetPlatform = () => {
       const updatedMeets = meets.map(m =>
         m.id === meet.id
           ? {
-              ...m,
-              participants: [...m.participants, {
-                email: invitation.inviteeEmail,
-                pseudo: `User${Math.floor(Math.random() * 1000)}`,
-                status: 'accepted'
-              }]
-            }
+            ...m,
+            participants: [...m.participants, {
+              email: invitation.inviteeEmail,
+              pseudo: `User${Math.floor(Math.random() * 1000)}`,
+              status: 'accepted'
+            }]
+          }
           : m
       );
       setMeets(updatedMeets);
@@ -255,128 +489,123 @@ const JitsiMeetPlatform = () => {
   const handleJoinMeet = (meet, userPseudo) => {
     setActiveMeet({ ...meet, userPseudo });
     setView('meeting');
-    
+
     setTimeout(() => initJitsi(meet, userPseudo), 100);
   };
 
- async function initJitsi(meet, userPseudo) {
-  if (!jitsiContainerRef.current) return;
+  async function initJitsi(meet, userPseudo) {
+    if (!jitsiContainerRef.current) return;
 
-  // Détruire l'instance existante si présente
-  if (jitsiApiRef.current) {
-    jitsiApiRef.current.dispose();
-    jitsiApiRef.current = null;
+    // Détruire l'instance existante si présente
+    if (jitsiApiRef.current) {
+      jitsiApiRef.current.dispose();
+      jitsiApiRef.current = null;
+    }
+
+    // Normaliser le nom de la salle (simple, sans tenant)
+    let roomSimple = meet?.roomName || `room-${Date.now()}`;
+    roomSimple = String(roomSimple).trim().toLowerCase().replace(/\//g, '-');
+
+    console.log('🚀 Demande de JWT pour la salle:', roomSimple);
+
+    // Demander un JWT au backend
+    let jaasJwt;
+    try {
+      const resp = await fetch(`${JAAS_CONFIG.jwtApiUrl}/api/generate-jwt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user: {
+            id: currentUser?.id || currentUser?.email || Date.now().toString(),
+            name: userPseudo || currentUser?.pseudo || 'Invité',
+            email: currentUser?.email || '',
+            moderator: false
+          },
+          room: roomSimple
+        })
+      });
+
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        console.error('❌ Erreur backend JWT:', body);
+        throw new Error('Impossible de récupérer le JWT du backend');
+      }
+
+      const data = await resp.json();
+      if (!data.jwt) {
+        console.error('❌ Pas de JWT dans la réponse:', data);
+        throw new Error('Pas de JWT dans la réponse du backend');
+      }
+      jaasJwt = data.jwt;
+      console.log('✅ JWT reçu avec succès');
+    } catch (err) {
+      console.error('❌ Erreur récupération JWT:', err);
+      alert(`Impossible d'obtenir le token sécurisé.\nVérifiez que le backend est démarré sur ${JAAS_CONFIG.jwtApiUrl}`);
+      return;
+    }
+
+    // Construire le nom complet de la salle: "<APP_ID>/<roomSimple>"
+    const fullRoomName = `${JAAS_CONFIG.appId}/${roomSimple}`;
+    console.log('🚀 Connexion à Jitsi:', fullRoomName);
+
+    // Configuration Jitsi avec désactivation des messages privés
+    const options = {
+      roomName: fullRoomName,
+      jwt: jaasJwt,
+      parentNode: jitsiContainerRef.current,
+      width: '100%',
+      height: '100%',
+      configOverwrite: {
+        startWithAudioMuted: true,
+        startWithVideoMuted: true,
+        prejoinPageEnabled: false,
+        disablePrivateMessages: true,
+        toolbarButtons: [
+          'camera',
+          'desktop',
+          'microphone',
+          'hangup',
+          'participants-pane',
+          'raisehand',
+          'settings',
+          'tileview',
+          'fullscreen',
+        ]
+      },
+      interfaceConfigOverwrite: {
+        SHOW_JITSI_WATERMARK: false,
+      },
+      userInfo: {
+        displayName: userPseudo || currentUser?.pseudo || 'Invité'
+      }
+    };
+
+    // Créer l'instance Jitsi
+    try {
+      if (!window.JitsiMeetExternalAPI) {
+        throw new Error('JitsiMeetExternalAPI non chargé. Vérifiez que le script external_api.js est bien inclus.');
+      }
+
+      const api = new window.JitsiMeetExternalAPI(JAAS_CONFIG.domain, options);
+      jitsiApiRef.current = api;
+
+      api.addEventListener('videoConferenceJoined', () => {
+        console.log('🎉 Connecté à la réunion');
+      });
+
+      api.addEventListener('participantJoined', (p) => {
+        console.log('👤 Participant rejoint:', p);
+      });
+
+      api.addEventListener('readyToClose', () => {
+        console.log('👋 Réunion terminée');
+        handleLeaveMeet();
+      });
+    } catch (e) {
+      console.error('❌ Erreur création JitsiMeetExternalAPI:', e);
+      alert(`Impossible d'initialiser Jitsi: ${e.message}`);
+    }
   }
-
-  // Normaliser le nom de la salle (simple, sans tenant)
-  let roomSimple = meet?.roomName || `room-${Date.now()}`;
-  roomSimple = String(roomSimple).trim().toLowerCase().replace(/\//g, '-');
-
-  console.log('🚀 Demande de JWT pour la salle:', roomSimple);
-
-  // Demander un JWT au backend
-  let jaasJwt;
-  try {
-    const resp = await fetch(`${JAAS_CONFIG.jwtApiUrl}/api/generate-jwt`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user: {
-          id: currentUser?.id || currentUser?.email || Date.now().toString(),
-          name: userPseudo || currentUser?.pseudo || 'Invité',
-          email: currentUser?.email || '',
-          moderator: false
-        },
-        room: roomSimple
-      })
-    });
-
-    if (!resp.ok) {
-      const body = await resp.json().catch(() => null);
-      console.error('❌ Erreur backend JWT:', body);
-      throw new Error('Impossible de récupérer le JWT du backend');
-    }
-
-    const data = await resp.json();
-    if (!data.jwt) {
-      console.error('❌ Pas de JWT dans la réponse:', data);
-      throw new Error('Pas de JWT dans la réponse du backend');
-    }
-    jaasJwt = data.jwt;
-    console.log('✅ JWT reçu avec succès');
-  } catch (err) {
-    console.error('❌ Erreur récupération JWT:', err);
-    alert(`Impossible d'obtenir le token sécurisé.\nVérifiez que le backend est démarré sur ${JAAS_CONFIG.jwtApiUrl}`);
-    return;
-  }
-
-  // Construire le nom complet de la salle: "<APP_ID>/<roomSimple>"
-  const fullRoomName = `${JAAS_CONFIG.appId}/${roomSimple}`;
-  console.log('🚀 Connexion à Jitsi:', fullRoomName);
-
-  // Configuration Jitsi avec désactivation des messages privés
-  const options = {
-    roomName: fullRoomName,
-    jwt: jaasJwt,
-    parentNode: jitsiContainerRef.current,
-    width: '100%',
-    height: '100%',
-    configOverwrite: {
-      startWithAudioMuted: true,
-      startWithVideoMuted: true,
-      prejoinPageEnabled: false,
-      
-      // 🚫 Désactiver les messages privés
-      disablePrivateMessages: true,
-    },
-    configOverwrite: {
-      toolbarButtons: [
-        'camera',
-        'desktop',
-        'microphone',
-        'hangup',
-        'participants-pane',
-        'raisehand',
-        'settings',
-        'tileview',
-        'fullscreen',
-        // 'chat',  ← Retirez cette ligne pour désactiver le chat complètement
-      ]
-    },
-    interfaceConfigOverwrite: {
-      SHOW_JITSI_WATERMARK: false,
-    },
-    userInfo: {
-      displayName: userPseudo || currentUser?.pseudo || 'Invité'
-    }
-  };
-
-  // Créer l'instance Jitsi
-  try {
-    if (!window.JitsiMeetExternalAPI) {
-      throw new Error('JitsiMeetExternalAPI non chargé. Vérifiez que le script external_api.js est bien inclus.');
-    }
-
-    const api = new window.JitsiMeetExternalAPI(JAAS_CONFIG.domain, options);
-    jitsiApiRef.current = api;
-
-    api.addEventListener('videoConferenceJoined', () => {
-      console.log('🎉 Connecté à la réunion');
-    });
-
-    api.addEventListener('participantJoined', (p) => {
-      console.log('👤 Participant rejoint:', p);
-    });
-
-    api.addEventListener('readyToClose', () => {
-      console.log('👋 Réunion terminée');
-      handleLeaveMeet();
-    });
-  } catch (e) {
-    console.error('❌ Erreur création JitsiMeetExternalAPI:', e);
-    alert(`Impossible d'initialiser Jitsi: ${e.message}`);
-  }
-}
 
   const handleLeaveMeet = () => {
     if (jitsiApiRef.current) {
@@ -454,7 +683,7 @@ const JitsiMeetPlatform = () => {
             Quitter
           </button>
         </div>
-        
+
         <div className="flex-1 relative">
           <div ref={jitsiContainerRef} className="w-full h-full" />
         </div>
@@ -462,16 +691,16 @@ const JitsiMeetPlatform = () => {
     );
   }
 
-  const myMeets = meets.filter(m => 
-    m.organizer === currentUser.email || 
+  const myMeets = meets.filter(m =>
+    m.organizer === currentUser.email ||
     m.participants.some(p => p.email === currentUser.email)
   );
 
-  const myInvitations = invitations.filter(inv => 
+  const myInvitations = invitations.filter(inv =>
     inv.inviteeEmail === currentUser.email && inv.status === 'pending'
   );
 
-    return (
+  return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-[#fff6ea] shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -517,7 +746,7 @@ const JitsiMeetPlatform = () => {
                     <div>
                       <h3 className="font-semibold text-gray-800">{meet.title}</h3>
                       <p className="text-sm text-gray-600">
-                        Organisé par: {meet.organizerPseudo} • {meet.date} à {meet.time}
+                        Organisé par: {meet.organizerPseudo} • {formatFrenchTime(meet.date, meet.time)}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -561,21 +790,30 @@ const JitsiMeetPlatform = () => {
                   <h3 className="font-semibold text-lg text-gray-800">{meet.title}</h3>
                   <div className="flex items-center gap-2">
                     {meet.organizer === currentUser.email && (
-                      <span className="bg-#590293-100 text-#590293-800 text-xs px-2 py-1 rounded">Organisateur</span>
+                      <button
+                        onClick={() => handleEditMeet(meet)}
+                        className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-3 py-1 rounded text-sm font-medium flex items-center gap-1 transition-colors"
+                      >
+                        <Pencil size={14} />
+                        Modifier
+                      </button>
                     )}
                   </div>
                 </div>
                 <div className="space-y-2 mb-4 text-sm text-gray-600">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4" />
-                    <span>{meet.date} à {meet.time}</span>
+                    <span>{formatFrenchTime(meet.date, meet.time)}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowParticipants(meet.id)}
+                    className="flex items-center gap-2 hover:text-[#590293] transition-colors cursor-pointer"
+                  >
                     <Users className="w-4 h-4" />
-                    <span>{meet.participants.length} participant(s)</span>
-                  </div>
+                    <span>{getTotalParticipants(meet)} participant(s)</span>
+                  </button>
                   <a
-                    href={generateGoogleCalendarUrl(meet)}
+                    href={generateGoogleCalendarUrl(meet, true)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 border border-[#590293] text-[#590293] hover:border-[#f3d01f] hover:text-[#f3d01f] font-medium px-4 py-2 rounded-lg transition-colors duration-200"
@@ -583,12 +821,11 @@ const JitsiMeetPlatform = () => {
                     <CalendarPlus className="w-4 h-4" />
                     <span>Ajouter au Google Calendar</span>
                   </a>
-
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
-                      const pseudo = prompt('Entrez votre pseudo pour cette réunion:', currentUser.pseudo);
+                      const pseudo = prompt('Entrez votre prénom pour cette réunion:', currentUser.pseudo);
                       if (pseudo) handleJoinMeet(meet, pseudo);
                     }}
                     className="flex-1 bg-[#590293] text-white py-2 rounded-lg hover:bg-[#f3d01f] hover:text-black transition flex items-center justify-center gap-2"
@@ -645,7 +882,7 @@ const JitsiMeetPlatform = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Heure *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Heure (France UTC+1) *</label>
                   <input
                     type="time"
                     value={meetForm.time}
@@ -742,16 +979,173 @@ const JitsiMeetPlatform = () => {
         </div>
       )}
 
-      {sendingEmails && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-[#fff6ea] rounded-lg p-8 max-w-md text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#590293] mx-auto mb-4"></div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">Envoi des invitations</h3>
-            <p className="text-gray-600">Veuillez patienter...</p>
+      {showEditMeet && editMeetForm && (
+        <div className="fixed inset-0 bg-white bg-opacity-80 flex items-center justify-center p-4 z-50">
+          <div className="bg-[#fff6ea] rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex items-center justify-between sticky top-0 bg-[#fff6ea]">
+              <h2 className="text-2xl font-bold text-gray-800">Modifier la réunion</h2>
+              <button onClick={() => setShowEditMeet(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Titre de la réunion *</label>
+                <input
+                  type="text"
+                  value={editMeetForm.title}
+                  onChange={(e) => setEditMeetForm({ ...editMeetForm, title: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f3d01f] focus:border-transparent"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+                  <input
+                    type="date"
+                    value={editMeetForm.date}
+                    onChange={(e) => setEditMeetForm({ ...editMeetForm, date: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f3d01f] focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Heure (France UTC+1) *</label>
+                  <input
+                    type="time"
+                    value={editMeetForm.time}
+                    onChange={(e) => setEditMeetForm({ ...editMeetForm, time: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f3d01f] focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Durée (minutes)</label>
+                <input
+                  type="number"
+                  value={editMeetForm.duration}
+                  onChange={(e) => setEditMeetForm({ ...editMeetForm, duration: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f3d01f] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Mail className="w-4 h-4 inline mr-1" />
+                  Ajouter des invités (emails)
+                </label>
+                {editMeetForm.invitees.map((email, index) => (
+                  <div key={index} className="flex gap-2 mb-2">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        const newInvitees = [...editMeetForm.invitees];
+                        newInvitees[index] = e.target.value;
+                        setEditMeetForm({ ...editMeetForm, invitees: newInvitees });
+                      }}
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f3d01f] focus:border-transparent"
+                      placeholder="nouveau@email.com"
+                    />
+                    {editMeetForm.invitees.length > 1 && (
+                      <button
+                        onClick={() => setEditMeetForm({
+                          ...editMeetForm,
+                          invitees: editMeetForm.invitees.filter((_, i) => i !== index)
+                        })}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="w-6 h-6" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  onClick={() => setEditMeetForm({ ...editMeetForm, invitees: [...editMeetForm.invitees, ''] })}
+                  className="text-[#590293] hover:text-[#f3d01f] text-sm flex items-center gap-2 mt-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Ajouter un invité
+                </button>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  onClick={handleUpdateMeet}
+                  disabled={sendingEmails}
+                  className="flex-1 bg-[#590293] text-white py-3 rounded-lg hover:bg-[#4a027a] transition font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {sendingEmails ? 'Envoi en cours...' : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      Enregistrer les modifications
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
-    </div>
+
+
+
+      {
+        sendingEmails && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+            <div className="bg-[#fff6ea] rounded-lg p-8 max-w-md text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#590293] mx-auto mb-4"></div>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">Envoi des invitations</h3>
+              <p className="text-gray-600">Veuillez patienter...</p>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        showParticipants && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+              <div className="p-6 border-b flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <Users className="w-6 h-6 text-[#590293]" />
+                  Participants
+                </h2>
+                <button onClick={() => setShowParticipants(null)} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-6 max-h-96 overflow-y-auto">
+                {getParticipantsList(meets.find(m => m.id === showParticipants)).map((participant, index) => (
+                  <div key={index} className="flex items-center justify-between py-3 border-b last:border-b-0">
+                    <div>
+                      <p className="font-medium text-gray-800">{participant.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-3 py-1 rounded-full font-medium ${participant.role === 'Organisateur'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-blue-100 text-blue-800'
+                        }`}>
+                        {participant.role}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-b-2xl">
+                <p className="text-sm text-gray-600 text-center">
+                  Total: {getTotalParticipants(meets.find(m => m.id === showParticipants))} participant(s)
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 };
 

@@ -173,3 +173,29 @@ app.listen(PORT, () => {
     console.warn('   Configurez JAAS_APP_ID et JAAS_API_KEY dans .env');
   }
 });
+
+// Ajoutez cette route dans votre server.js
+
+// Route de réveil spécifique pour Make
+app.get('/api/wake-up', (req, res) => {
+  console.log('🔔 Backend réveillé par Make à:', new Date().toISOString());
+  res.json({
+    status: 'awake',
+    message: 'Backend is ready for meetings',
+    timestamp: Date.now(),
+    uptime: process.uptime()
+  });
+});
+
+// Health check amélioré
+app.get('/health', (req, res) => {
+  console.log('💚 Health check appelé à:', new Date().toISOString());
+  res.json({
+    status: 'ok',
+    jaasAppId: JAAS_APP_ID ? '✅ Configured' : '❌ Missing',
+    apiKey: JAAS_API_KEY ? '✅ Configured' : '❌ Missing',
+    privateKey: privateKey ? '✅ Loaded' : '❌ Missing',
+    timestamp: Date.now(),
+    uptime: process.uptime()
+  });
+});
