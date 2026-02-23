@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Calendar, Users, Video, Send, X, Plus, Check, Clock, Mail, AlertCircle, CalendarPlus, Pencil, Save, Trash2 } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 
@@ -21,6 +21,73 @@ const JAAS_CONFIG = {
 //   webhookUrl: process.env.REACT_APP_MAKE_WEBHOOK_URL || 'YOUR_MAKE_WEBHOOK_URL'
 // };
 
+// ---------------------------------------------------------------------------
+// Helpers : pré-chargement, compatibilité navigateur, diagnostic réseau
+// ---------------------------------------------------------------------------
+
+let jitsiScriptLoaded = false;
+let jitsiScriptPromise = null;
+
+function preloadJitsiScript() {
+  if (jitsiScriptLoaded || jitsiScriptPromise) return jitsiScriptPromise;
+  jitsiScriptPromise = new Promise((resolve, reject) => {
+    if (window.JitsiMeetExternalAPI) { jitsiScriptLoaded = true; resolve(); return; }
+    const s = document.createElement('script');
+    s.src = `https://${JAAS_CONFIG.domain}/external_api.js`;
+    s.async = true;
+    s.onload = () => { jitsiScriptLoaded = true; resolve(); };
+    s.onerror = () => reject(new Error('Impossible de charger le script Jitsi'));
+    document.head.appendChild(s);
+  });
+  return jitsiScriptPromise;
+}
+
+function addDnsPrefetch() {
+  const domains = [JAAS_CONFIG.domain, `olocation-oem.ocloud.8x8.vc`];
+  domains.forEach(d => {
+    if (!document.querySelector(`link[href="https://${d}"]`)) {
+      const link = document.createElement('link');
+      link.rel = 'preconnect';
+      link.href = `https://${d}`;
+      link.crossOrigin = 'anonymous';
+      document.head.appendChild(link);
+    }
+  });
+}
+
+function checkBrowserCompatibility() {
+  const errors = [];
+  if (!window.RTCPeerConnection) errors.push('WebRTC non supporté par ce navigateur.');
+  if (!navigator.mediaDevices?.getUserMedia) errors.push('L\'accès caméra/micro n\'est pas disponible.');
+
+  const ua = navigator.userAgent;
+  const isOldIE = /MSIE|Trident/.test(ua);
+  const isOldSafari = /Safari/.test(ua) && !/Chrome/.test(ua) && /Version\/[0-9]\./.test(ua);
+  if (isOldIE) errors.push('Internet Explorer n\'est pas supporté. Utilisez Chrome, Firefox ou Edge.');
+  if (isOldSafari) errors.push('Votre version de Safari est trop ancienne. Mettez-la à jour ou utilisez Chrome/Firefox.');
+
+  return errors;
+}
+
+async function runPreflightCheck(backendUrl) {
+  const results = { backend: false, jitsiScript: false, webrtc: false, clockDrift: 0 };
+
+  try {
+    const t0 = Date.now();
+    const resp = await fetch(`${backendUrl}/api/preflight`, { signal: AbortSignal.timeout(5000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      results.backend = true;
+      results.clockDrift = Math.abs(Date.now() - data.serverTime);
+    }
+    results.backendLatency = Date.now() - t0;
+  } catch { /* backend unreachable */ }
+
+  results.jitsiScript = !!window.JitsiMeetExternalAPI;
+  results.webrtc = !!window.RTCPeerConnection;
+  return results;
+}
+
 const JitsiMeetPlatform = () => {
   const [view, setView] = useState('home');
   const [meets, setMeets] = useState([]);
@@ -31,6 +98,18 @@ const JitsiMeetPlatform = () => {
   const [sendingEmails, setSendingEmails] = useState(false);
   const jitsiContainerRef = useRef(null);
   const jitsiApiRef = useRef(null);
+  const [connectionStatus, setConnectionStatus] = useState(null); // null | 'connecting' | 'connected' | 'error'
+  const [connectionError, setConnectionError] = useState(null);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 2;
+
+  // Pré-chargement au montage de l'application
+  useEffect(() => {
+    addDnsPrefetch();
+    preloadJitsiScript().catch(() => {});
+    // Wake-up backend pour éliminer le cold-start
+    fetch(`${JAAS_CONFIG.jwtApiUrl}/api/preflight`).catch(() => {});
+  }, []);
 
   const [meetForm, setMeetForm] = useState({
     title: '',
@@ -490,11 +569,22 @@ const JitsiMeetPlatform = () => {
     setActiveMeet({ ...meet, userPseudo });
     setView('meeting');
 
+    setConnectionStatus('connecting');
+    setConnectionError(null);
+    retryCountRef.current = 0;
     setTimeout(() => initJitsi(meet, userPseudo), 100);
   };
 
   async function initJitsi(meet, userPseudo) {
     if (!jitsiContainerRef.current) return;
+
+    // --- Vérification compatibilité navigateur ---
+    const browserErrors = checkBrowserCompatibility();
+    if (browserErrors.length > 0) {
+      setConnectionStatus('error');
+      setConnectionError(browserErrors.join('\n'));
+      return;
+    }
 
     // Détruire l'instance existante si présente
     if (jitsiApiRef.current) {
@@ -502,13 +592,33 @@ const JitsiMeetPlatform = () => {
       jitsiApiRef.current = null;
     }
 
-    // Normaliser le nom de la salle (simple, sans tenant)
+    // S'assurer que le script Jitsi est chargé
+    try {
+      await preloadJitsiScript();
+    } catch {
+      setConnectionStatus('error');
+      setConnectionError('Impossible de charger le script Jitsi. Vérifiez votre connexion internet.');
+      return;
+    }
+
     let roomSimple = meet?.roomName || `room-${Date.now()}`;
     roomSimple = String(roomSimple).trim().toLowerCase().replace(/\//g, '-');
 
-    console.log('🚀 Demande de JWT pour la salle:', roomSimple);
+    // --- Diagnostic réseau rapide ---
+    const preflight = await runPreflightCheck(JAAS_CONFIG.jwtApiUrl);
+    if (!preflight.backend) {
+      setConnectionStatus('error');
+      setConnectionError(
+        'Le serveur est injoignable. Veuillez réessayer dans quelques instants.\n' +
+        'Si le problème persiste, vérifiez votre connexion internet ou contactez l\'administrateur.'
+      );
+      return;
+    }
+    if (preflight.clockDrift > 30000) {
+      console.warn('Décalage horloge détecté:', preflight.clockDrift, 'ms');
+    }
 
-    // Demander un JWT au backend
+    // --- Demander un JWT au backend ---
     let jaasJwt;
     try {
       const resp = await fetch(`${JAAS_CONFIG.jwtApiUrl}/api/generate-jwt`, {
@@ -527,28 +637,26 @@ const JitsiMeetPlatform = () => {
 
       if (!resp.ok) {
         const body = await resp.json().catch(() => null);
-        console.error('❌ Erreur backend JWT:', body);
+        console.error('Erreur backend JWT:', body);
         throw new Error('Impossible de récupérer le JWT du backend');
       }
 
       const data = await resp.json();
       if (!data.jwt) {
-        console.error('❌ Pas de JWT dans la réponse:', data);
         throw new Error('Pas de JWT dans la réponse du backend');
       }
       jaasJwt = data.jwt;
-      console.log('✅ JWT reçu avec succès');
     } catch (err) {
-      console.error('❌ Erreur récupération JWT:', err);
-      alert(`Impossible d'obtenir le token sécurisé.\nVérifiez que le backend est démarré sur ${JAAS_CONFIG.jwtApiUrl}`);
+      console.error('Erreur récupération JWT:', err);
+      setConnectionStatus('error');
+      setConnectionError(
+        `Impossible d'obtenir le token de sécurité.\nVérifiez que le backend est démarré sur ${JAAS_CONFIG.jwtApiUrl}`
+      );
       return;
     }
 
-    // Construire le nom complet de la salle: "<APP_ID>/<roomSimple>"
     const fullRoomName = `${JAAS_CONFIG.appId}/${roomSimple}`;
-    console.log('🚀 Connexion à Jitsi:', fullRoomName);
 
-    // Configuration Jitsi avec désactivation des messages privés
     const options = {
       roomName: fullRoomName,
       jwt: jaasJwt,
@@ -560,6 +668,25 @@ const JitsiMeetPlatform = () => {
         startWithVideoMuted: true,
         prejoinPageEnabled: false,
         disablePrivateMessages: true,
+        // --- Optimisations latence & connexion ---
+        enableWelcomePage: false,
+        enableClosePage: false,
+        disableDeepLinking: true,
+        p2p: {
+          enabled: true,
+          stunServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ]
+        },
+        channelLastN: 4,
+        enableLayerSuspension: true,
+        resolution: 480,
+        constraints: {
+          video: { height: { ideal: 480, max: 720, min: 180 } }
+        },
+        enableNoisyMicDetection: false,
+        disableAudioLevels: true,
         toolbarButtons: [
           'camera',
           'desktop',
@@ -574,47 +701,91 @@ const JitsiMeetPlatform = () => {
       },
       interfaceConfigOverwrite: {
         SHOW_JITSI_WATERMARK: false,
+        DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+        MOBILE_APP_PROMO: false,
       },
       userInfo: {
         displayName: userPseudo || currentUser?.pseudo || 'Invité'
       }
     };
 
-    // Créer l'instance Jitsi
+    // --- Créer l'instance Jitsi avec handlers d'erreur ---
     try {
       if (!window.JitsiMeetExternalAPI) {
-        throw new Error('JitsiMeetExternalAPI non chargé. Vérifiez que le script external_api.js est bien inclus.');
+        throw new Error('JitsiMeetExternalAPI non chargé.');
       }
 
       const api = new window.JitsiMeetExternalAPI(JAAS_CONFIG.domain, options);
       jitsiApiRef.current = api;
 
       api.addEventListener('videoConferenceJoined', () => {
-        console.log('🎉 Connecté à la réunion');
+        setConnectionStatus('connected');
+        setConnectionError(null);
+        retryCountRef.current = 0;
       });
 
       api.addEventListener('participantJoined', (p) => {
-        console.log('👤 Participant rejoint:', p);
+        console.log('Participant rejoint:', p.displayName || p.id);
       });
 
       api.addEventListener('readyToClose', () => {
-        console.log('👋 Réunion terminée');
         handleLeaveMeet();
       });
+
+      api.addEventListener('videoConferenceLeft', () => {
+        console.log('Conférence quittée');
+      });
+
+      api.addEventListener('errorOccurred', (e) => {
+        console.error('Erreur Jitsi:', e);
+        const errorType = e?.error?.type || e?.type || '';
+        const errorMsg = e?.error?.message || e?.message || '';
+
+        if (errorType === 'conference.connectionError' || errorType === 'connection.onerror') {
+          if (retryCountRef.current < MAX_RETRIES) {
+            retryCountRef.current += 1;
+            setConnectionError(`Erreur de connexion. Nouvelle tentative (${retryCountRef.current}/${MAX_RETRIES})...`);
+            if (jitsiApiRef.current) { jitsiApiRef.current.dispose(); jitsiApiRef.current = null; }
+            setTimeout(() => initJitsi(meet, userPseudo), 2000);
+            return;
+          }
+        }
+
+        setConnectionStatus('error');
+        setConnectionError(buildUserFriendlyError(errorType, errorMsg));
+      });
+
     } catch (e) {
-      console.error('❌ Erreur création JitsiMeetExternalAPI:', e);
-      alert(`Impossible d'initialiser Jitsi: ${e.message}`);
+      console.error('Erreur création JitsiMeetExternalAPI:', e);
+      setConnectionStatus('error');
+      setConnectionError(`Impossible d'initialiser la visioconférence: ${e.message}`);
     }
   }
 
-  const handleLeaveMeet = () => {
+  function buildUserFriendlyError(errorType, errorMsg) {
+    if (/onerror|connectionError/i.test(errorType)) {
+      return 'Impossible de se connecter au serveur de visioconférence.\n\nVérifiez que :\n- Votre connexion internet est active\n- Votre firewall/VPN ne bloque pas les connexions UDP\n- Vous n\'utilisez pas un proxy TLS restrictif';
+    }
+    if (/onjwtError|onjwtInvalid|onjwtExpired/i.test(errorType) || /jwt/i.test(errorMsg)) {
+      return 'Le token de sécurité a expiré ou est invalide.\nRechargez la page et réessayez.';
+    }
+    if (/onicefailed|oniceerror/i.test(errorType)) {
+      return 'La connexion WebRTC a échoué (ICE).\n\nCela peut être causé par :\n- Un firewall bloquant les ports UDP\n- Un VPN instable\n- Un NAT restrictif\n\nEssayez de désactiver votre VPN ou utilisez un autre réseau.';
+    }
+    return `Erreur de connexion : ${errorMsg || errorType || 'inconnue'}.\nRechargez la page et réessayez.`;
+  }
+
+  const handleLeaveMeet = useCallback(() => {
     if (jitsiApiRef.current) {
       jitsiApiRef.current.dispose();
       jitsiApiRef.current = null;
     }
     setActiveMeet(null);
+    setConnectionStatus(null);
+    setConnectionError(null);
+    retryCountRef.current = 0;
     setView('home');
-  };
+  }, []);
 
   if (!currentUser) {
     return (
@@ -685,6 +856,38 @@ const JitsiMeetPlatform = () => {
         </div>
 
         <div className="flex-1 relative">
+          {connectionStatus === 'connecting' && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-80 z-10">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent mx-auto mb-4" />
+                <p className="text-white text-lg">Connexion en cours...</p>
+                <p className="text-gray-400 text-sm mt-1">Préparation de la visioconférence</p>
+              </div>
+            </div>
+          )}
+          {connectionStatus === 'error' && connectionError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-10">
+              <div className="bg-gray-800 rounded-xl p-8 max-w-md text-center shadow-xl border border-red-500/30">
+                <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                <h3 className="text-white text-lg font-semibold mb-3">Erreur de connexion</h3>
+                <p className="text-gray-300 text-sm whitespace-pre-line mb-6">{connectionError}</p>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    onClick={() => { setConnectionStatus('connecting'); setConnectionError(null); retryCountRef.current = 0; initJitsi(activeMeet, activeMeet.userPseudo); }}
+                    className="bg-purple-600 text-white px-5 py-2 rounded-lg hover:bg-purple-700 transition"
+                  >
+                    Réessayer
+                  </button>
+                  <button
+                    onClick={handleLeaveMeet}
+                    className="bg-gray-600 text-white px-5 py-2 rounded-lg hover:bg-gray-700 transition"
+                  >
+                    Retour
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <div ref={jitsiContainerRef} className="w-full h-full" />
         </div>
       </div>
