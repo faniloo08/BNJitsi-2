@@ -177,15 +177,15 @@ app.listen(PORT, () => {
 // Ajoutez cette route dans votre server.js
 
 // Route de réveil spécifique pour Make
-app.get('/api/wake-up', (req, res) => {
-  console.log('🔔 Backend réveillé par Make à:', new Date().toISOString());
-  res.json({
-    status: 'awake',
-    message: 'Backend is ready for meetings',
-    timestamp: Date.now(),
-    uptime: process.uptime()
-  });
-});
+// app.get('/api/wake-up', (req, res) => {
+//   console.log('🔔 Backend réveillé par Make à:', new Date().toISOString());
+//   res.json({
+//     status: 'awake',
+//     message: 'Backend is ready for meetings',
+//     timestamp: Date.now(),
+//     uptime: process.uptime()
+//   });
+// });
 
 // Health check amélioré
 app.get('/health', (req, res) => {

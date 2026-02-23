@@ -4,22 +4,22 @@ import emailjs from '@emailjs/browser';
 
 // Configuration EmailJS
 const EMAILJS_CONFIG = {
-  serviceId: process.env.REACT_APP_EMAILJS_SERVICE || "service_ku5gvjs",
-  templateId: process.env.REACT_APP_EMAILJS_TEMPLATE || "template_i979cae",
-  publicKey: process.env.REACT_APP_EMAILJS_PUBLIC || "aH7OeR0t5BKb_rfZc"
+  serviceId: process.env.REACT_APP_EMAILJS_SERVICE,
+  templateId: process.env.REACT_APP_EMAILJS_TEMPLATE,
+  publicKey: process.env.REACT_APP_EMAILJS_PUBLIC
 };
 
 // Configuration JaaS
 const JAAS_CONFIG = {
-  appId: process.env.REACT_APP_JAAS_APP_ID || 'vpaas-magic-cookie-adc32f2732de47b3bdf19305d2e91523',
-  jwtApiUrl: process.env.REACT_APP_JWT_API_URL || 'http://localhost:3001',
+  appId: process.env.REACT_APP_JAAS_APP_ID,
+  jwtApiUrl: process.env.REACT_APP_JWT_API_URL,
   domain: '8x8.vc'
 };
 
-// Configuration Make Webhook
-const MAKE_CONFIG = {
-  webhookUrl: process.env.REACT_APP_MAKE_WEBHOOK_URL || 'YOUR_MAKE_WEBHOOK_URL'
-};
+// // Configuration Make Webhook pour réveiller Render
+// const MAKE_CONFIG = {
+//   webhookUrl: process.env.REACT_APP_MAKE_WEBHOOK_URL || 'YOUR_MAKE_WEBHOOK_URL'
+// };
 
 const JitsiMeetPlatform = () => {
   const [view, setView] = useState('home');
@@ -215,52 +215,52 @@ const JitsiMeetPlatform = () => {
   }
 
   // Envoyer les données de la réunion à Make pour planifier le réveil du backend
-  async function sendMeetingToMake(meet) {
-    // Ne pas envoyer si l'URL du webhook n'est pas configurée
-    if (!MAKE_CONFIG.webhookUrl || MAKE_CONFIG.webhookUrl === 'YOUR_MAKE_WEBHOOK_URL') {
-      console.log('Webhook Make non configuré, activation automatique du backend désactivée');
-      return { success: false, reason: 'webhook_not_configured' };
-    }
+  // async function sendMeetingToMake(meet) {
+  //   // Ne pas envoyer si l'URL du webhook n'est pas configurée
+  //   if (!MAKE_CONFIG.webhookUrl || MAKE_CONFIG.webhookUrl === 'YOUR_MAKE_WEBHOOK_URL') {
+  //     console.log('Webhook Make non configuré, activation automatique du backend désactivée');
+  //     return { success: false, reason: 'webhook_not_configured' };
+  //   }
 
-    try {
-      // Calculer le timestamp exact de la réunion
-      const meetingDateTime = new Date(`${meet.date}T${meet.time}:00`);
-      const meetingTimestamp = meetingDateTime.getTime();
+  //   try {
+  //     // Calculer le timestamp exact de la réunion
+  //     const meetingDateTime = new Date(`${meet.date}T${meet.time}:00`);
+  //     const meetingTimestamp = meetingDateTime.getTime();
 
-      const payload = {
-        meetId: meet.id,
-        roomName: meet.roomName,
-        title: meet.title,
-        date: meet.date,
-        time: meet.time,
-        meetingTimestamp: meetingTimestamp,
-        organizerEmail: meet.organizer,
-        organizerPseudo: meet.organizerpseudo,
-        backendUrl: JAAS_CONFIG.jwtApiUrl,
-        createdAt: new Date().toISOString()
-      };
+  //     const payload = {
+  //       meetId: meet.id,
+  //       roomName: meet.roomName,
+  //       title: meet.title,
+  //       date: meet.date,
+  //       time: meet.time,
+  //       meetingTimestamp: meetingTimestamp,
+  //       organizerEmail: meet.organizer,
+  //       organizerPseudo: meet.organizerpseudo,
+  //       backendUrl: JAAS_CONFIG.jwtApiUrl,
+  //       createdAt: new Date().toISOString()
+  //     };
 
-      console.log('📤 Envoi des données de réunion à Make:', payload);
+  //     console.log('📤 Envoi des données de réunion à Make:', payload);
 
-      const response = await fetch(MAKE_CONFIG.webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
+  //     const response = await fetch(MAKE_CONFIG.webhookUrl, {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify(payload)
+  //     });
 
-      if (!response.ok) {
-        throw new Error(`Erreur Make webhook: ${response.status}`);
-      }
+  //     if (!response.ok) {
+  //       throw new Error(`Erreur Make webhook: ${response.status}`);
+  //     }
 
-      console.log('✅ Réunion envoyée à Make avec succès');
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Erreur envoi à Make:', error);
-      return { success: false, error: error.message };
-    }
-  }
+  //     console.log('✅ Réunion envoyée à Make avec succès');
+  //     return { success: true };
+  //   } catch (error) {
+  //     console.error('❌ Erreur envoi à Make:', error);
+  //     return { success: false, error: error.message };
+  //   }
+  // }
 
   const handleDeleteMeet = async (meetId) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette réunion ?')) {
@@ -308,10 +308,10 @@ const JitsiMeetPlatform = () => {
     await saveData('meets', updatedMeets);
 
     // Envoyer la réunion à Make pour planifier le réveil du backend
-    const makeResult = await sendMeetingToMake(newMeet);
-    if (makeResult.success) {
-      console.log('✅ Réveil automatique du backend planifié via Make');
-    }
+    // const makeResult = await sendMeetingToMake(newMeet);
+    // if (makeResult.success) {
+    //   console.log('✅ Réveil automatique du backend planifié via Make');
+    // }
 
     const validInvitees = meetForm.invitees.filter(email => email.trim() && email.includes('@'));
 
