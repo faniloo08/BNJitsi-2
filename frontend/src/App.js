@@ -43,6 +43,7 @@ const JitsiMeetPlatform = () => {
   const [showParticipants, setShowParticipants] = useState(null);
   const [showEditMeet, setShowEditMeet] = useState(false);
   const [editMeetForm, setEditMeetForm] = useState(null);
+  const [isJoining, setIsJoining] = useState(false);
 
   // Obtenir le nombre total de participants (organisateur + tous les invités uniques)
   const getTotalParticipants = (meet) => {
@@ -489,6 +490,7 @@ const JitsiMeetPlatform = () => {
   const handleJoinMeet = (meet, userPseudo) => {
     setActiveMeet({ ...meet, userPseudo });
     setView('meeting');
+    setIsJoining(true);
 
     setTimeout(() => initJitsi(meet, userPseudo), 100);
   };
@@ -534,12 +536,14 @@ const JitsiMeetPlatform = () => {
       const data = await resp.json();
       if (!data.jwt) {
         console.error('❌ Pas de JWT dans la réponse:', data);
+        setIsJoining(false);
         throw new Error('Pas de JWT dans la réponse du backend');
       }
       jaasJwt = data.jwt;
       console.log('✅ JWT reçu avec succès');
     } catch (err) {
       console.error('❌ Erreur récupération JWT:', err);
+      setIsJoining(false);
       alert(`Impossible d'obtenir le token sécurisé.\nVérifiez que le backend est démarré sur ${JAAS_CONFIG.jwtApiUrl}`);
       return;
     }
@@ -591,6 +595,7 @@ const JitsiMeetPlatform = () => {
 
       api.addEventListener('videoConferenceJoined', () => {
         console.log('🎉 Connecté à la réunion');
+        setIsJoining(false);
       });
 
       api.addEventListener('participantJoined', (p) => {
@@ -603,6 +608,7 @@ const JitsiMeetPlatform = () => {
       });
     } catch (e) {
       console.error('❌ Erreur création JitsiMeetExternalAPI:', e);
+      setIsJoining(false);
       alert(`Impossible d'initialiser Jitsi: ${e.message}`);
     }
   }
@@ -614,6 +620,7 @@ const JitsiMeetPlatform = () => {
     }
     setActiveMeet(null);
     setView('home');
+    setIsJoining(false);
   };
 
   if (!currentUser) {
@@ -685,6 +692,13 @@ const JitsiMeetPlatform = () => {
         </div>
 
         <div className="flex-1 relative">
+          {isJoining && (
+            <div className="absolute inset-0 bg-gray-900 z-10 flex flex-col items-center justify-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#f3d01f] mb-4"></div>
+              <p className="text-white text-lg font-semibold animate-pulse">Connexion sécurisée en cours...</p>
+              <p className="text-gray-400 text-sm mt-2">Acquisition du token et chargement de la salle...</p>
+            </div>
+          )}
           <div ref={jitsiContainerRef} className="w-full h-full" />
         </div>
       </div>
