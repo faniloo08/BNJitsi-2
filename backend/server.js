@@ -66,8 +66,8 @@ function generateJaasJWT(user, room) {
     aud: 'jitsi',
     sub: JAAS_APP_ID, // Votre AppID (tenant)
     room: '*', // Wildcard pour permettre toutes les salles (ou spécifiez le nom exact)
-    exp: now + 7200, // Expire dans 2 heures
-    nbf: now - 10, // Valide depuis 10 secondes avant
+    exp: now + 7200,
+    nbf: now - 30,
     
     // Context spécifique à l'utilisateur
     context: {
@@ -177,15 +177,15 @@ app.listen(PORT, () => {
 // Ajoutez cette route dans votre server.js
 
 // Route de réveil spécifique pour Make
-app.get('/api/wake-up', (req, res) => {
-  console.log('🔔 Backend réveillé par Make à:', new Date().toISOString());
-  res.json({
-    status: 'awake',
-    message: 'Backend is ready for meetings',
-    timestamp: Date.now(),
-    uptime: process.uptime()
-  });
-});
+// app.get('/api/wake-up', (req, res) => {
+//   console.log('🔔 Backend réveillé par Make à:', new Date().toISOString());
+//   res.json({
+//     status: 'awake',
+//     message: 'Backend is ready for meetings',
+//     timestamp: Date.now(),
+//     uptime: process.uptime()
+//   });
+// });
 
 // Health check amélioré
 app.get('/health', (req, res) => {
@@ -197,5 +197,13 @@ app.get('/health', (req, res) => {
     privateKey: privateKey ? '✅ Loaded' : '❌ Missing',
     timestamp: Date.now(),
     uptime: process.uptime()
+  });
+});
+
+app.get('/api/preflight', (req, res) => {
+  res.json({
+    status: 'ok',
+    serverTime: Date.now(),
+    configured: !!(JAAS_APP_ID && JAAS_API_KEY && privateKey)
   });
 });
