@@ -10,6 +10,8 @@ Plateforme de visioconférence professionnelle utilisant Jitsi as a Service (Jaa
 - 📆 **Intégration Google Calendar** (lien direct dans les emails)
 - 👥 **Gestion des participants** et acceptation d'invitations
 - 🔒 **Authentification sécurisée** avec JWT
+- ⏳ **Indicateur de chargement** sécurisé lors de l'accès aux salles
+- 📱 **Support PWA basique** avec manifest.json
 - 💾 **Stockage persistant** des réunions
 - 🚫 **Messages privés désactivés** (chat public uniquement)
 

@@ -598,14 +598,39 @@ const JitsiMeetPlatform = () => {
         setIsJoining(false);
       });
 
+      // Fallback au cas où videoConferenceJoined n'est pas fired en prod
       api.addEventListener('participantJoined', (p) => {
         console.log('👤 Participant rejoint:', p);
+        setIsJoining(false);
       });
 
       api.addEventListener('readyToClose', () => {
         console.log('👋 Réunion terminée');
+        setIsJoining(false);
         handleLeaveMeet();
       });
+
+      api.addEventListener('videoConferenceLeft', () => {
+        setIsJoining(false);
+      });
+
+      // Fallback absolu : Écouter le chargement de l'iframe directement
+      const iframe = api.getIFrame();
+      if (iframe) {
+        iframe.onload = () => {
+          console.log('✅ Iframe Jitsi chargée (fallback onload)');
+          setIsJoining(false);
+        };
+      }
+
+      // Fallback ultime : Timeout après 15 secondes
+      setTimeout(() => {
+        if (isJoining) {
+          console.log('⚠️ Timeout de sécurité: fermeture forcée du loader');
+          setIsJoining(false);
+        }
+      }, 15000);
+
     } catch (e) {
       console.error('❌ Erreur création JitsiMeetExternalAPI:', e);
       setIsJoining(false);
